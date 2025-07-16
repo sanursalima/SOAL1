@@ -12,6 +12,7 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/buku")
+@CrossOrigin(origins = "*")
 public class BukuController {
 
     private final BukuService bukuService;
