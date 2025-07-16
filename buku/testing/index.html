@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Manajemen Buku Perpustakaan</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background-color: #f2f2f2; }
+    input, button, select { margin: 5px 0; padding: 6px; }
+    .form-container { margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>Manajemen Buku Perpustakaan</h1>
+
+  <div class="form-container">
+    <h2>Tambah / Edit Buku</h2>
+    <form id="bookForm">
+      <input type="hidden" id="bookId">
+      <input type="text" id="judul" placeholder="Judul Buku" required><br>
+      <input type="text" id="penulis" placeholder="Penulis" required><br>
+      <input type="number" id="tahunTerbit" placeholder="Tahun Terbit" required><br>
+      <input type="text" id="kategori" placeholder="Kategori" required><br>
+      <button type="submit">Simpan</button>
+      <button type="button" onclick="resetForm()">Batal</button>
+    </form>
+  </div>
+
+  <h2>Daftar Buku</h2>
+  <table id="booksTable">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Judul</th>
+        <th>Penulis</th>
+        <th>Tahun Terbit</th>
+        <th>Kategori</th>
+        <th>Aksi</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+ <script>
+    const API_BASE_URL = 'http://localhost:8080/api/buku'; // Pastikan URL ini sesuai dengan backend Anda
+
+    // Fungsi untuk menampilkan pesan status ke pengguna
+    function showStatusMessage(message, isError = false) {
+        const statusDiv = document.createElement('div');
+        statusDiv.textContent = message;
+        statusDiv.style.padding = '10px';
+        statusDiv.style.margin = '10px 0';
+        statusDiv.style.borderRadius = '5px';
+        if (isError) {
+            statusDiv.style.backgroundColor = '#f8d7da';
+            statusDiv.style.color = '#721c24';
+            statusDiv.style.border = '1px solid #f5c6cb';
+        } else {
+            statusDiv.style.backgroundColor = '#d4edda';
+            statusDiv.style.color = '#155724';
+            statusDiv.style.border = '1px solid #c3e6cb';
+        }
+        const container = document.querySelector('body');
+        container.insertBefore(statusDiv, container.firstChild); // Tampilkan di bagian atas
+        setTimeout(() => statusDiv.remove(), 5000); // Hapus pesan setelah 5 detik
+    }
+
+    // Fungsi untuk mengambil dan menampilkan semua buku
+    async function fetchBooks() {
+        try {
+            const res = await fetch(API_BASE_URL);
+            if (!res.ok) { // Cek jika response tidak OK (misal: 404, 500)
+                throw new Error(`Gagal mengambil buku: ${res.status} ${res.statusText}`);
+            }
+            const books = await res.json();
+            const tbody = document.querySelector('#booksTable tbody');
+            tbody.innerHTML = ''; // Kosongkan tabel sebelum mengisi ulang
+
+            if (books.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: #666;">Belum ada buku. Tambahkan yang pertama!</td></tr>';
+                return;
+            }
+
+            books.forEach(book => {
+                const row = `<tr>
+                    <td>${book.id}</td>
+                    <td>${book.judul}</td>
+                    <td>${book.penulis}</td>
+                    <td>${book.tahunTerbit}</td>
+                    <td>${book.kategori}</td>
+                    <td>
+                        <button onclick='editBook(${JSON.stringify(book)})'>Edit</button>
+                        <button onclick='deleteBook(${book.id})'>Hapus</button>
+                    </td>
+                </tr>`;
+                tbody.innerHTML += row;
+            });
+            // showStatusMessage('Daftar buku berhasil dimuat.'); // Bisa diaktifkan jika perlu feedback setiap kali muat
+        } catch (error) {
+            console.error('Error fetching books:', error);
+            showStatusMessage('Gagal memuat daftar buku. Pastikan server backend berjalan.', true);
+        }
+    }
+
+    // Event Listener untuk submit form (Tambah atau Edit)
+    document.getElementById('bookForm').addEventListener('submit', async function(e) {
+        e.preventDefault(); // Mencegah reload halaman
+
+        const id = document.getElementById('bookId').value;
+        const judul = document.getElementById('judul').value.trim();
+        const penulis = document.getElementById('penulis').value.trim();
+        const tahunTerbit = parseInt(document.getElementById('tahunTerbit').value);
+        const kategori = document.getElementById('kategori').value.trim();
+
+        // Validasi input sederhana
+        if (!judul || !penulis || isNaN(tahunTerbit) || !kategori) {
+            showStatusMessage('Semua kolom harus diisi dengan benar.', true);
+            return;
+        }
+        if (tahunTerbit <= 0 || tahunTerbit > new Date().getFullYear() + 5) { // Contoh validasi tahun
+            showStatusMessage('Tahun terbit tidak valid.', true);
+            return;
+        }
+
+        const data = { judul, penulis, tahunTerbit, kategori }; // shorthand for {judul: judul, ...}
+
+        try {
+            let response;
+            let successMessage;
+
+            if (id) {
+                // Mode Edit (PUT)
+                response = await fetch(`${API_BASE_URL}/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data),
+                });
+                successMessage = 'Buku berhasil diperbarui!';
+            } else {
+                // Mode Tambah Baru (POST)
+                response = await fetch(API_BASE_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data),
+                });
+                successMessage = 'Buku berhasil ditambahkan!';
+            }
+
+            if (!response.ok) {
+                // Tangani respons non-OK dari server
+                const errorData = await response.json().catch(() => ({ message: 'Terjadi kesalahan tidak diketahui.' }));
+                throw new Error(`Error ${response.status}: ${errorData.message || response.statusText}`);
+            }
+
+            showStatusMessage(successMessage);
+            resetForm(); // Bersihkan formulir
+            fetchBooks(); // Muat ulang daftar buku
+        } catch (error) {
+            console.error('Error saving book:', error);
+            showStatusMessage(`Gagal menyimpan buku: ${error.message || 'Periksa koneksi atau input Anda.'}`, true);
+        }
+    });
+
+    // Fungsi untuk mengisi formulir saat tombol Edit diklik
+    function editBook(book) {
+        document.getElementById('bookId').value = book.id;
+        document.getElementById('judul').value = book.judul;
+        document.getElementById('penulis').value = book.penulis;
+        document.getElementById('tahunTerbit').value = book.tahunTerbit;
+        document.getElementById('kategori').value = book.kategori;
+        window.scrollTo({ top: 0, behavior: 'smooth' }); // Gulir ke atas untuk formulir
+    }
+
+    // Fungsi untuk menghapus buku
+    async function deleteBook(id) {
+        if (confirm('Yakin ingin menghapus buku ini?')) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/${id}`, { method: 'DELETE' });
+                if (!response.ok) {
+                    throw new Error(`Gagal menghapus buku: ${response.status} ${response.statusText}`);
+                }
+                showStatusMessage('Buku berhasil dihapus!');
+                fetchBooks(); // Muat ulang daftar buku
+            } catch (error) {
+                console.error('Error deleting book:', error);
+                showStatusMessage(`Gagal menghapus buku: ${error.message || 'Terjadi kesalahan.'}`, true);
+            }
+        }
+    }
+
+    // Fungsi untuk mereset formulir
+    function resetForm() {
+        document.getElementById('bookId').value = ''; // Kosongkan ID untuk mode tambah baru
+        document.getElementById('bookForm').reset(); // Reset semua input form
+    }
+
+    // Panggil fetchBooks() saat halaman pertama kali dimuat
+    fetchBooks();
+</script>
+</body>
+</html>
